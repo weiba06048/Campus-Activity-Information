@@ -28,5 +28,13 @@ Build app UI in `src/`. Keep `.openai/hosting.json`, `worker/index.js`, `scripts
 - 论坛（`src/Forum.jsx`）分三类帖子：`discuss` 讨论安排、`suggest` 提建议、`ask` 提问求助，定义在组件内的 `TOPIC_TYPES`，改类型要同步更新筛选条与类型标识配色（`.topic-*`）。
 - 论坛数据存在 `campus-activity-hub:forum:v1`，一条帖子连同它的回复一起存（`replies` 数组），不再单独开键；列表按「最后回复时间」排序，有回复的老帖会浮上来。
 - 论坛帖子与回复同样只有本机可见，页面顶部已如实说明；不要把论坛内容当成全校共享的讨论区来写文案。
+
+## GitHub Pages 部署
+
+- 在线地址：https://weiba06048.github.io/Campus-Activity-Information/ ，发布由 `.github/workflows/deploy-pages.yml` 完成，仓库 Settings → Pages 的 Source 需保持「GitHub Actions」。
+- 资源前缀由 `vite.config.mjs` 里的 `base` 控制，取值来自环境变量 `VITE_BASE`：部署时设为 `/<仓库名>/`，本地开发与 Sites 交付不设该变量（保持根路径）。改仓库名后无需改代码，workflow 会用 `github.event.repository.name` 自动适配。
+- 发布产物是 `dist/client`。不要再用 Jekyll 之类的工作流发布源码——`index.html` 里的 `/src/main.jsx` 未经构建，直接发布只会得到白屏。
+- 本地模拟线上路径：`$env:VITE_BASE="/Campus-Activity-Information/"; npm run build; npm run preview`，然后访问 http://localhost:4173/Campus-Activity-Information/ 检查。
+- 路由使用 hash，静态托管不需要额外的 404 回退配置，深链接（如 `#/forum`）可直接分享。
 - 关于信息缺失：原始信息里没有的内容统一写「信息未注明」，页面会用浅灰色呈现，不要为了好看编造地点、主办方或费用。
 - 未收录的信息放在 `src/data/activities.js` 末尾的 `INFO_PENDING_REVIEW`，不参与渲染。
