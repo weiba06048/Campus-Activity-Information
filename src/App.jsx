@@ -8,6 +8,7 @@ import {
   CalendarBlank,
   CaretRight,
   ChatCircle,
+  ChatCircleDots,
   CheckCircle,
   Clock,
   EnvelopeSimple,
@@ -36,6 +37,7 @@ import {
 import { CATEGORIES, CATEGORY_BY_ID, categoryOf } from "./data/activities.js";
 import { DataProvider, useData } from "./store.jsx";
 import { Comments } from "./Comments.jsx";
+import { ForumPage, ThreadPage } from "./Forum.jsx";
 import { PublishPage } from "./PublishPage.jsx";
 
 // 板块图标映射：数据里写图标名，这里换成真正的图标组件
@@ -73,6 +75,10 @@ function parseRoute(hash) {
   if (segments[0] === "a" && segments[1]) return { name: "activity", activityId: segments[1] };
   if (segments[0] === "search") return { name: "search", keyword: params.get("q") || "" };
   if (segments[0] === "publish") return { name: "publish", editId: params.get("id") || null };
+  if (segments[0] === "forum") {
+    if (segments[1] === "t" && segments[2]) return { name: "thread", threadId: segments[2] };
+    return { name: "forum" };
+  }
   return { name: "home" };
 }
 
@@ -352,6 +358,10 @@ function Header({ route }) {
           <button type="button" className="primary-button publish-entry" onClick={() => navigate("#/publish")}>
             <Plus size={15} weight="bold" />
             发布活动
+          </button>
+          <button type="button" className="ghost-button forum-entry" onClick={() => navigate("#/forum")}>
+            <ChatCircleDots size={15} weight="bold" />
+            论坛
           </button>
         </div>
       </div>
@@ -874,6 +884,8 @@ export function App() {
           {route.name === "publish" ? (
             <PublishPage key={route.editId || "new"} editId={route.editId} />
           ) : null}
+          {route.name === "forum" ? <ForumPage /> : null}
+          {route.name === "thread" ? <ThreadPage key={route.threadId} threadId={route.threadId} /> : null}
           {route.name === "home" ? <HomePage /> : null}
         </main>
         <Footer />
