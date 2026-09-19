@@ -7,6 +7,7 @@ import {
   Buildings,
   CalendarBlank,
   CaretRight,
+  ChatCircle,
   CheckCircle,
   Clock,
   EnvelopeSimple,
@@ -18,26 +19,24 @@ import {
   MapPin,
   Megaphone,
   MicrophoneStage,
+  PencilSimple,
+  Plus,
   Presentation,
   SealCheck,
   Sparkle,
   Tag,
   Ticket,
+  Trash,
   Trophy,
   Users,
   UsersThree,
   Wrench,
   X,
 } from "@phosphor-icons/react";
-import {
-  ACTIVITIES,
-  ACTIVITY_BY_ID,
-  CATEGORIES,
-  CATEGORY_BY_ID,
-  activitiesOfCategory,
-  categoryOf,
-  searchActivities,
-} from "./data/activities.js";
+import { CATEGORIES, CATEGORY_BY_ID, categoryOf } from "./data/activities.js";
+import { DataProvider, useData } from "./store.jsx";
+import { Comments } from "./Comments.jsx";
+import { PublishPage } from "./PublishPage.jsx";
 
 // 板块图标映射：数据里写图标名，这里换成真正的图标组件
 const ICONS = {
@@ -73,6 +72,7 @@ function parseRoute(hash) {
   if (segments[0] === "c" && segments[1]) return { name: "category", categoryId: segments[1] };
   if (segments[0] === "a" && segments[1]) return { name: "activity", activityId: segments[1] };
   if (segments[0] === "search") return { name: "search", keyword: params.get("q") || "" };
+  if (segments[0] === "publish") return { name: "publish", editId: params.get("id") || null };
   return { name: "home" };
 }
 
@@ -161,20 +161,21 @@ function EmptyState({ title, hint }) {
 // ---------------------------------------------------------------- 右上角搜索框
 
 function SearchBox({ route }) {
+  const { activities, search } = useData();
   const [value, setValue] = useState(route.name === "search" ? route.keyword : "");
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const boxRef = useRef(null);
 
-  const results = useMemo(() => (value.trim() ? searchActivities(value) : []), [value]);
+  const results = useMemo(() => (value.trim() ? search(value) : []), [value, search]);
   const visibleResults = results.slice(0, 6);
   const hotKeywords = useMemo(() => {
     const counter = new Map();
-    for (const activity of ACTIVITIES) {
+    for (const activity of activities) {
       for (const tag of activity.tags) counter.set(tag, (counter.get(tag) || 0) + 1);
     }
     return [...counter.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([tag]) => tag);
-  }, []);
+  }, [activities]);
 
   useEffect(() => {
     const onPointerDown = (event) => {
@@ -346,7 +347,13 @@ function Header({ route }) {
             <i>找活动，从这一页开始</i>
           </span>
         </button>
-        <SearchBox route={route} />
+        <div className="header-actions">
+          <SearchBox route={route} />
+          <button type="button" className="primary-button publish-entry" onClick={() => navigate("#/publish")}>
+            <Plus size={15} weight="bold" />
+            发布活动
+          </button>
+        </div>
       </div>
     </header>
   );
@@ -366,8 +373,10 @@ function Footer() {
 // ---------------------------------------------------------------- 活动卡片
 
 function ActivityCard({ activity }) {
+  const { commentCountOf } = useData();
   const category = categoryOf(activity);
   const parts = dateParts(activity);
+  const commentCount = commentCountOf(activity.id);
   return (
     <button
       type="button"
@@ -389,7 +398,11 @@ function ActivityCard({ activity }) {
       <span className="activity-body">
         <span className="activity-top">
           <span className="activity-category">{category?.name}</span>
-          <TrustBadge trust={activity.trust} />
+          {activity.mine ? (
+            <span className="trust-badge is-mine">我发布的</span>
+          ) : (
+            <TrustBadge trust={activity.trust} />
+          )}
           <StatusPill status={activity.status} />
         </span>
         <span className="activity-title">{activity.title}</span>
@@ -408,6 +421,12 @@ function ActivityCard({ activity }) {
             </span>
           ))}
         </span>
+        {commentCount ? (
+          <span className="activity-meta is-unknown">
+            <ChatCircle size={14} weight="bold" />
+            {commentCount} 条评论
+          </span>
+        ) : null}
       </span>
       <ArrowRight size={16} weight="bold" className="activity-arrow" />
     </button>
@@ -417,15 +436,16 @@ function ActivityCard({ activity }) {
 // ---------------------------------------------------------------- 首页
 
 function HomePage() {
+  const { activities, ofCategory, posts, commentCountOf } = useData();
   const featured = useMemo(
     () =>
-      [...ACTIVITIES]
+      [...activities]
         .filter((item) => item.startDate && item.status !== "已结束")
         .sort((a, b) => a.startDate.localeCompare(b.startDate))
         .slice(0, 3),
-    [],
+    [activities],
   );
-  const openCount = ACTIVITIES.filter((item) => item.status === "报名中").length;
+  const openCount = activities.filter((item) => item.status === "报名中").length;
 
   return (
     <div className="page">
@@ -436,10 +456,49 @@ function HomePage() {
         </p>
         <h1 className="hero-title">今天，去参加点什么</h1>
         <p className="hero-subtitle">
-          共 {CATEGORIES.length} 个活动板块、{ACTIVITIES.length} 场活动，其中 {openCount} 场正在报名。
+          共 {CATEGORIES.length} 个活动板块、{activities.length} 场活动，其中 {openCount} 场正在报名。
           点开板块看看，别让机会只在群里飘过。
         </p>
+        <div className="hero-actions">
+          <button type="button" className="primary-button" onClick={() => navigate("#/publish")}>
+            <Plus size={15} weight="bold" />
+            发布活动信息
+          </button>
+          <span className="hero-note">活动、招募、组队信息都能发，发布后只有你自己这台设备看得到</span>
+        </div>
       </section>
+
+      {posts.length ? (
+        <section className="section">
+          <div className="section-head">
+            <h2 className="section-title">我发布的</h2>
+            <span className="section-hint">只保存在这台设备上，点进去可以编辑或删除</span>
+          </div>
+          <ul className="my-post-list">
+            {posts.map((post) => {
+              const category = categoryOf(post);
+              const count = commentCountOf(post.id);
+              return (
+                <li key={post.id}>
+                  <button type="button" className="my-post" onClick={() => navigate(`#/a/${post.id}`)}>
+                    <span className="my-post-main">
+                      <span className="my-post-title">{post.title}</span>
+                      <span className="my-post-meta">
+                        {category?.name} · {post.dateLabel} · {post.status}
+                        {count ? ` · ${count} 条评论` : ""}
+                      </span>
+                    </span>
+                    <span className="my-post-enter">
+                      查看 / 编辑
+                      <ArrowRight size={15} weight="bold" />
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
 
       <section className="section">
         <div className="section-head">
@@ -483,7 +542,7 @@ function HomePage() {
         </div>
         <div className="category-grid">
           {CATEGORIES.map((category) => {
-            const count = activitiesOfCategory(category.id).length;
+            const count = ofCategory(category.id).length;
             return (
               <button
                 type="button"
@@ -517,6 +576,7 @@ function HomePage() {
 // ---------------------------------------------------------------- 板块详情
 
 function CategoryPage({ categoryId }) {
+  const { ofCategory } = useData();
   const category = CATEGORY_BY_ID[categoryId];
   const [statusFilter, setStatusFilter] = useState("全部");
   useScrollTopOnRouteChange(`c-${categoryId}`);
@@ -533,7 +593,7 @@ function CategoryPage({ categoryId }) {
     );
   }
 
-  const all = activitiesOfCategory(categoryId);
+  const all = ofCategory(categoryId);
   const statuses = STATUS_ORDER.filter((status) => all.some((item) => item.status === status));
   const list = statusFilter === "全部" ? all : all.filter((item) => item.status === statusFilter);
 
@@ -600,7 +660,8 @@ function InfoRow({ icon, label, value, highlight }) {
 }
 
 function ActivityPage({ activityId }) {
-  const activity = ACTIVITY_BY_ID[activityId];
+  const { activityById, ofCategory, removePost } = useData();
+  const activity = activityById[activityId];
   useScrollTopOnRouteChange(`a-${activityId}`);
 
   if (!activity) {
@@ -616,7 +677,7 @@ function ActivityPage({ activityId }) {
   }
 
   const category = categoryOf(activity);
-  const related = activitiesOfCategory(activity.categoryId)
+  const related = ofCategory(activity.categoryId)
     .filter((item) => item.id !== activity.id)
     .slice(0, 2);
 
@@ -632,7 +693,11 @@ function ActivityPage({ activityId }) {
           <span className="detail-crumb" style={{ color: category.accent }}>
             {category.name}
           </span>
-          <TrustBadge trust={activity.trust} />
+          {activity.mine ? (
+            <span className="trust-badge is-mine">我发布的</span>
+          ) : (
+            <TrustBadge trust={activity.trust} />
+          )}
           <StatusPill status={activity.status} />
         </div>
         <h1 className="detail-title">{activity.title}</h1>
@@ -655,6 +720,36 @@ function ActivityPage({ activityId }) {
           </p>
         ) : null}
 
+        {activity.mine ? (
+          <div className="own-post-bar">
+            <span className="own-post-hint">
+              这是你发布的信息，保存在当前浏览器，其他同学看不到；清理浏览器数据后会消失。
+            </span>
+            <div className="own-post-actions">
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => navigate(`#/publish?id=${activity.id}`)}
+              >
+                <PencilSimple size={15} weight="bold" />
+                编辑
+              </button>
+              <button
+                type="button"
+                className="danger-button"
+                onClick={() => {
+                  if (!window.confirm("删除这条信息？删除后无法恢复。")) return;
+                  removePost(activity.id);
+                  navigate(`#/c/${category.id}`);
+                }}
+              >
+                <Trash size={15} weight="bold" />
+                删除
+              </button>
+            </div>
+          </div>
+        ) : null}
+
         <div className="info-card">
           <InfoRow icon={<Clock size={16} weight="bold" />} label="活动时间" value={activity.timeLabel} />
           <InfoRow icon={<MapPin size={16} weight="bold" />} label="活动地点" value={activity.location} />
@@ -672,7 +767,7 @@ function ActivityPage({ activityId }) {
 
         <section className="detail-section">
           <h2 className="detail-section-title">活动介绍</h2>
-          {activity.detail.map((paragraph) => (
+          {(activity.detail || []).map((paragraph) => (
             <p className="detail-paragraph" key={paragraph}>
               {paragraph}
             </p>
@@ -721,6 +816,8 @@ function ActivityPage({ activityId }) {
             </div>
           </section>
         ) : null}
+
+        <Comments activityId={activity.id} />
       </article>
     </div>
   );
@@ -729,8 +826,9 @@ function ActivityPage({ activityId }) {
 // ---------------------------------------------------------------- 搜索结果页
 
 function SearchPage({ keyword }) {
+  const { search } = useData();
   useScrollTopOnRouteChange(`s-${keyword}`);
-  const results = useMemo(() => searchActivities(keyword), [keyword]);
+  const results = useMemo(() => search(keyword), [keyword, search]);
 
   return (
     <div className="page">
@@ -766,15 +864,20 @@ export function App() {
   useScrollTopOnRouteChange(routeKey);
 
   return (
-    <div className="app">
-      <Header route={route} />
-      <main className="main">
-        {route.name === "category" ? <CategoryPage categoryId={route.categoryId} /> : null}
-        {route.name === "activity" ? <ActivityPage activityId={route.activityId} /> : null}
-        {route.name === "search" ? <SearchPage keyword={route.keyword} /> : null}
-        {route.name === "home" ? <HomePage /> : null}
-      </main>
-      <Footer />
-    </div>
+    <DataProvider>
+      <div className="app">
+        <Header route={route} />
+        <main className="main">
+          {route.name === "category" ? <CategoryPage categoryId={route.categoryId} /> : null}
+          {route.name === "activity" ? <ActivityPage activityId={route.activityId} /> : null}
+          {route.name === "search" ? <SearchPage keyword={route.keyword} /> : null}
+          {route.name === "publish" ? (
+            <PublishPage key={route.editId || "new"} editId={route.editId} />
+          ) : null}
+          {route.name === "home" ? <HomePage /> : null}
+        </main>
+        <Footer />
+      </div>
+    </DataProvider>
   );
 }

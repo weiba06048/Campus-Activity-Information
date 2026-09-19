@@ -685,8 +685,9 @@ function sortKey(activity) {
   return activity.startDate || "9999-12-31";
 }
 
-export function activitiesOfCategory(categoryId) {
-  return ACTIVITIES.filter((item) => item.categoryId === categoryId).sort((a, b) =>
+// activities 参数让调用方可以把「用户自己发布的活动」一起传进来
+export function activitiesOfCategory(categoryId, activities = ACTIVITIES) {
+  return activities.filter((item) => item.categoryId === categoryId).sort((a, b) =>
     sortKey(a).localeCompare(sortKey(b)),
   );
 }
@@ -696,10 +697,10 @@ export function categoryOf(activity) {
 }
 
 // 站内搜索：命中标题、标签、板块名、主办方、地点与简介
-export function searchActivities(keyword) {
+export function searchActivities(keyword, activities = ACTIVITIES) {
   const query = String(keyword || "").trim().toLowerCase();
   if (!query) return [];
-  return ACTIVITIES.map((activity) => {
+  return activities.map((activity) => {
     const category = categoryOf(activity);
     const haystacks = [
       { text: activity.title, weight: 6 },
